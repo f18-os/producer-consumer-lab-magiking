@@ -44,5 +44,54 @@ them in sequence
 
 Note: You may have ancillary objects and method in order to make you're code easer to understand and implement.
 
+# Solution
 
+My solution is in `GrayDisplay.py`
 
+There are two producers-consumer queues used in this project.
+One for the counts of the extracted frames,
+and one for the counts of the frames converted to grayscale.
+
+For each queue a Lock, and two semaphores were used.
+The idioms used to access the queues are as follow.
+
+To bound the Queues, the empty Semaphores are initially set to 10.
+
+For producers:
+```
+empty_sem.acquire()
+lock.acquire()
+q.put(count)
+lock.release()
+full_sem.release()
+```
+
+For consumers:
+```
+full_sem.acquire()
+lock.acquire()
+count = q.get()
+lock.release()
+empty_sem.release()
+```
+
+The queue implementation used is the one provided by Dr. Freudenthal.
+It is in `Queue.py`.
+
+The queues are safeguarded with Locks and Semaphores
+so that the three different threads can interact with the queues
+safeley.
+
+There is one thread for Extracting the frames,
+one for converting them to Grayscale,
+and one for displaying the threads.
+
+Each thread only processes each frame once.
+
+# Testing
+
+you can test it with:
+
+```
+$ ./test.sh
+```

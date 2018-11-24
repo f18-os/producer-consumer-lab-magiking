@@ -22,14 +22,14 @@ clipFileName = 'clip.mp4'
 global ex_q, ex_lock, ex_empty, ex_full
 ex_q = Q()
 ex_lock = Lock()
-ex_empty = Semaphore(50) # this caps the capacity of our q
+ex_empty = Semaphore(10) # this caps the capacity of our q
 ex_full = Semaphore(0) # q is empty to start with (ie no full cells)
 
 # Grayscaled frames Queue
 global gr_q, gr_lock, gr_empty, gr_full
 gr_q = Q()
 gr_lock = Lock()
-gr_empty = Semaphore(50) # this caps the capacity of our q
+gr_empty = Semaphore(10) # this caps the capacity of our q
 gr_full = Semaphore(0) # q is empty to start with (ie no full cells)
 
 # My threads
@@ -226,3 +226,4 @@ thread3.start()
 thread1.join()
 thread2.join()
 thread3.join()
+
