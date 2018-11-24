@@ -25,6 +25,12 @@ ex_lock = Lock()
 ex_empty = Semaphore(50) # this caps the capacity of our q
 ex_full = Semaphore(0) # q is empty to start with (ie no full cells)
 
+# Grayscaled frames Queue
+global gr_q, gr_lock, gr_empty, gr_full
+gr_q = Q()
+gr_lock = Lock()
+gr_empty = Semaphore(50) # this caps the capacity of our q
+gr_full = Semaphore(0) # q is empty to start with (ie no full cells)
 
 # My threads
 class ExtractFramesThread(Thread):
@@ -83,6 +89,7 @@ class GrayscaleThread(Thread):
         print(self.name + " running")
         global outputDir
         global ex_q, ex_lock, ex_empty, ex_full
+        global gr_q, gr_lock, gr_empty, gr_full
         count = None
 
         # get the count
@@ -114,6 +121,14 @@ class GrayscaleThread(Thread):
             # write output file
             cv2.imwrite(outFileName, grayscaleFrame)
 
+            # Put count into display q
+            print(gr_empty._value)
+            gr_empty.acquire()
+            gr_lock.acquire()
+            gr_q.put(count)
+            gr_lock.release()
+            gr_full.release()
+
             # get next count
             print(ex_full._value)
             ex_full.acquire()
@@ -123,75 +138,91 @@ class GrayscaleThread(Thread):
             ex_empty.release()
 
             if count == None: # No more frames
+                gr_empty.acquire()
+                gr_lock.acquire()
+                gr_q.put(count) # Put the explicit None
+                gr_lock.release()
+                gr_full.release()
                 break
 
-        # tell next thread that we're done
         print('{} done'.format(self.name))
-        # ex_empty().acquire()
-        # try:
-        #     ex_lock.acquire()
-        #     print('{} done'.format(self.name))
-        #     ex_q.put(None)
-        #     ex_lock.release()
-        # finally:
-        #     ex_full.release()
 
 
-# class DisplayThread(Thread):
-#     def __init__(self, iters):
-#         Thread.__init__(self, name="DisplayThread")
-#     def run(self):
-#         print(self.name + " running")
-#         global outputDir
-#         global ex_q, ex_lock, ex_empty, ex_full
-#         frameDelay   = 42       # the answer to everything
-#         count = None
-#         startTime = time.time()
+class DisplayThread(Thread):
+    def __init__(self):
+        Thread.__init__(self, name="DisplayThread")
+    def run(self):
+        print(self.name + " running")
+        global outputDir
+        global ex_q, ex_lock, ex_empty, ex_full
+        global gr_q, gr_lock, gr_empty, gr_full
+        frameDelay   = 42       # the answer to everything
+        count = None
+        startTime = time()
 
-#         # Generate the filename for the first frame 
-#         frameFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
+        # get the count
+        gr_full.acquire()
+        gr_lock.acquire()
+        count = gr_q.get()
+        gr_lock.release()
+        gr_empty.release()
 
-#         # load the frame
-#         frame = cv2.imread(frameFileName)
+        # Generate the filename for the first frame 
+        frameFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
 
-#         # while frame is not None:
-#         while True:
+        # load the frame
+        frame = cv2.imread(frameFileName)
 
-#             print("Displaying frame {}".format(count))
-#             # Display the frame in a window called "Video"
-#             cv2.imshow("Video", frame)
+        # while frame is not None:
+        while True:
+            # get the next frame filename
+            frameFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
 
-#             # compute the amount of time that has elapsed
-#             # while the frame was processed
-#             elapsedTime = int((time.time() - startTime) * 1000)
-#             print("Time to process frame {} ms".format(elapsedTime))
+            # Read the next frame file
+            frame = cv2.imread(frameFileName)
+            if frame is None:
+                continue
 
-#             # determine the amount of time to wait, also
-#             # make sure we don't go into negative time
-#             timeToWait = max(1, frameDelay - elapsedTime)
+            print("Displaying frame {}".format(count))
+            # Display the frame in a window called "Video"
+            cv2.imshow("Video", frame)
 
-#             # Wait for 42 ms and check if the user wants to quit
-#             if cv2.waitKey(timeToWait) and 0xFF == ord("q"):
-#                 break    
+            # compute the amount of time that has elapsed
+            # while the frame was processed
+            elapsedTime = int((time() - startTime) * 1000)
+            print("Time to process frame {} ms".format(elapsedTime))
 
-#             # get the start time for processing the next frame
-#             startTime = time.time()
+            # determine the amount of time to wait, also
+            # make sure we don't go into negative time
+            timeToWait = max(1, frameDelay - elapsedTime)
 
-#             # get the next frame filename
-#             count += 1
-#             frameFileName = "{}/grayscale_{:04d}.jpg".format(outputDir, count)
+            # Wait for 42 ms and check if the user wants to quit
+            if cv2.waitKey(timeToWait) and 0xFF == ord("q"):
+                break    
 
-#             # Read the next frame file
-#             frame = cv2.imread(frameFileName)
+            # get the start time for processing the next frame
+            startTime = time()
 
-#         # make sure we cleanup the windows, otherwise we might end up with a mess
-#         cv2.destroyAllWindows()
+            gr_full.acquire()
+            gr_lock.acquire()
+            count = gr_q.get()
+            gr_lock.release()
+            gr_empty.release()
+
+            if count is None:
+                break
+
+        # make sure we cleanup the windows, otherwise we might end up with a mess
+        cv2.destroyAllWindows()
 
 
 # Actually start the Threads
 thread1 = ExtractFramesThread()
 thread2 = GrayscaleThread()
-# thread3 = DisplayThread()
+thread3 = DisplayThread()
 thread1.start()
 thread2.start()
-# thread3.start()
+thread3.start()
+thread1.join()
+thread2.join()
+thread3.join()
